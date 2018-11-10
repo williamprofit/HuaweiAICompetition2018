@@ -107,7 +107,7 @@ def main():
 
         images = loadImages(batch)
         images = augmentImages(images)
-        saveImages(images, '../sample_data/augmented/')
+        saveImages(images, path + '/augmented')
 
 if __name__ == '__main__':
     main()
