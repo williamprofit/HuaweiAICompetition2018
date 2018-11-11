@@ -18,50 +18,62 @@ IMG_HEIGHT=3968
 IMG_WIDTH=2976
 
 BATCH_SIZE=1
-NB_EPOCHS=250
+NB_EPOCHS=1
 
 FILTER_SIZE = (3,3)
-NO_FILTERS = 64
-STRIDE = 3
+NB_FILTERS = 64
+STRIDE = 1
 # Note half of total layers. Now can ensure total layers are always even
-NO_CONV_LAYERS = 15
+NB_CONV_LAYERS = 5
+
+# strides: An integer or tuple/list of 2 integers, specifying the strides of the convolution along the height 
+# and width. Can be a single integer to specify the same value for all spatial dimensions. 
+# Specifying any stride value != 1 is incompatible with specifying any dilation_rate value != 1.
 
 def createModel():
     input_shape = (IMG_HEIGHT, IMG_WIDTH, 3)
-
-    model = Sequential()
-    c0 = Conv2D(NO_FILTERS, FILTER_SIZE, STRIDE,use_bias=True, 
-        activation="relu", input_shape=input_shape) 
-    model.add(c0)
-
-    for i in range(1,NO_CONV_LAYERS*2):
-        if(i < NO_CONV_LAYERS):
-            c = Conv2D(NO_FILTERS, FILTER_SIZE, STRIDE,use_bias=True, 
-                activation="relu")(model.layers[i-1])
-            model.add(c)
+    img_input   = Input(shape=input_shape)
+    c0 = Conv2D(NB_FILTERS, FILTER_SIZE, strides=STRIDE, use_bias=True,
+        activation="relu", input_shape=input_shape)(img_input)
+    layers = [c0]
+    for i in range(1,NB_CONV_LAYERS*2):
+        print(i)
+        if(i < NB_CONV_LAYERS):
+            c = Conv2D(NB_FILTERS, FILTER_SIZE, strides=STRIDE, use_bias=True,
+                activation="relu")(layers[i-1])
+            layers.append(c)
         else:
-            relative_index = (i - NO_CONV_LAYERS)
+            relative_index = (i - NB_CONV_LAYERS)
             if(relative_index % 2 == 0):
-                d_pre = Conv2DTranspose(NO_FILTERS, FILTER_SIZE, 
-                    STRIDE, use_bias=True)(model.layers[i-1]) #note no relu here
-                d = activations.relu( add([model.inputs[relative_index], d_pre])) #relu here
-            else:
-                d = Conv2DTranspose(NO_FILTERS, FILTER_SIZE, STRIDE, use_bias=True, 
-                    activation="relu")(model.layers[i-1])
-            
-            model.add(d)
+                print('pairing ' + str(i) + ' with ' + str(NB_CONV_LAYERS - (relative_index+2)))
+                if(NB_CONV_LAYERS - (relative_index+2) < 0):
+                    d_pre = Conv2DTranspose(3, FILTER_SIZE,
+                        strides=STRIDE, use_bias=True)(layers[i-1]) #note no relu here
+                    temp = add([img_input, d_pre])
+                else:
+                    d_pre = Conv2DTranspose(NB_FILTERS, FILTER_SIZE,
+                        strides=STRIDE, use_bias=True)(layers[i-1]) #note no relu here
+                    temp = add([layers[NB_CONV_LAYERS - (relative_index+2)], d_pre])
 
+                d = activations.relu( temp ) #relu here
+            else:
+                d = Conv2DTranspose(NB_FILTERS, FILTER_SIZE, strides=STRIDE, use_bias=True,
+                    activation="relu")(layers[i-1])
+
+            layers.append(d)
+            
+    print(len(layers))
+    model = Model(img_input, layers[-1])
     model.compile(loss='mean_squared_error',
                   optimizer = Adam(lr=0.0001),
                   metrics=['accuracy', metrics.psnr])
-
     return model
 
 def main():
     generator = DataGenerator(DATA_PATH, BATCH_SIZE)
 
     model = createModel()
-    model.fit_generator(generator, epochs=2)
+    #model.fit_generator(generator, epochs=NB_EPOCHS)
 
 if __name__ == '__main__':
     main()
