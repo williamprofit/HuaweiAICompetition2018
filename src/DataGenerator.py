@@ -80,7 +80,7 @@ class DataGenerator(keras.utils.Sequence):
             elif 'Noisy' in paths[i]:
                 y_paths.append(paths[i])
             else:
-                print('!WARNING! Invalid image path: ' + pats[i]
+                print('!WARNING! Invalid image path: ' + paths[i]
                      + '. Image was not loaded.')
 
         x_paths.sort()
