@@ -2,3 +2,6 @@
 .DS_Store
 ._.DS_Store
 
+# Ignore Python files/dirs
+__pycache__
+
