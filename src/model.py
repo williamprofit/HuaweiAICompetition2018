@@ -10,6 +10,7 @@ from keras.models import Model, Sequential
 from keras import activations
 from DataGenerator import DataGenerator
 import metrics
+from keras.backend import equal
 
 
 # Hyperparameters:
@@ -24,46 +25,48 @@ NB_EPOCHS=1
 FILTER_SIZE = (3,3)
 NB_FILTERS = 64
 STRIDE = 1
-# Note half of total layers. Now can ensure total layers are always even
-NB_CONV_LAYERS = 5
-
-# strides: An integer or tuple/list of 2 integers, specifying the strides of the convolution along the height 
-# and width. Can be a single integer to specify the same value for all spatial dimensions. 
-# Specifying any stride value != 1 is incompatible with specifying any dilation_rate value != 1.
+# Note half of total lcayers. Now can ensure total layers are always even
+NB_CONV_LAYERS = 10
 
 def createModel():
     input_shape = (IMG_HEIGHT, IMG_WIDTH, 3)
     img_input   = Input(shape=input_shape)
+    layers = [img_input]
+
     c0 = Conv2D(NB_FILTERS, FILTER_SIZE, strides=STRIDE, use_bias=True,
         activation="relu", input_shape=input_shape)(img_input)
-    layers = [c0]
-    for i in range(1,NB_CONV_LAYERS*2):
-        print(i)
-        if(i < NB_CONV_LAYERS):
+
+    layers.append(c0) 
+    # a lil dirty but ensures that the last layer will always be linked to input which is necessary.
+    linking_offset = (NB_CONV_LAYERS) % 2
+
+    for i in range(2,NB_CONV_LAYERS*2+1):
+        if(i <= NB_CONV_LAYERS):
             c = Conv2D(NB_FILTERS, FILTER_SIZE, strides=STRIDE, use_bias=True,
                 activation="relu")(layers[i-1])
             layers.append(c)
         else:
             relative_index = (i - NB_CONV_LAYERS)
-            if(relative_index % 2 == 0):
-                print('pairing ' + str(i) + ' with ' + str(NB_CONV_LAYERS - (relative_index+2)))
-                if(NB_CONV_LAYERS - (relative_index+2) < 0):
-                    print("pairing with noisy")
+            if(relative_index % 2 == linking_offset):
+                print('linking ' + str(i) + ' with ' + str(NB_CONV_LAYERS - (relative_index)))
+                
+                # Manually link with input since it won't work using layers[0]
+                if(NB_CONV_LAYERS - (relative_index) == 0):
                     d_pre = Conv2DTranspose(3, FILTER_SIZE,
-                        strides=STRIDE, use_bias=True)(layers[i-1]) #note no relu here
-                    linked_layer = add([img_input, d_pre])
+                        strides=STRIDE, use_bias=True)(layers[i-1])
+                    #ideally would want to use layers[0] instead of img_input here
+                    linked_layer = add([img_input, d_pre]) 
                 else:
                     d_pre = Conv2DTranspose(NB_FILTERS, FILTER_SIZE,
-                        strides=STRIDE, use_bias=True)(layers[i-1]) #note no relu here
-                    linked_layer = add([layers[NB_CONV_LAYERS - (relative_index+2)], d_pre])
+                        strides=STRIDE, use_bias=True)(layers[i-1])
+                    linked_layer = add([layers[NB_CONV_LAYERS - (relative_index)], d_pre])
 
-                d = Activation(activations.relu)(linked_layer) #relu here
+                d = Activation(activations.relu)(linked_layer) #relu after link
             else:
                 d = Conv2DTranspose(NB_FILTERS, FILTER_SIZE, strides=STRIDE, use_bias=True,
                     activation="relu")(layers[i-1])
 
             layers.append(d)
-    
 
     model = Model(inputs = img_input, outputs = layers[-1])
     model.compile(loss='mean_squared_error',
