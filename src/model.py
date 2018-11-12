@@ -13,7 +13,8 @@ import metrics
 
 
 # Hyperparameters:
-DATA_PATH='../sample_data/'
+# DATA_PATH='../sample_data/'
+DATA_PATH='D:/Documents/Imperial/Competitions/huaweiaicompetition/sample_data'
 IMG_HEIGHT=3968
 IMG_WIDTH=2976
 
@@ -47,28 +48,29 @@ def createModel():
             if(relative_index % 2 == 0):
                 print('pairing ' + str(i) + ' with ' + str(NB_CONV_LAYERS - (relative_index+2)))
                 if(NB_CONV_LAYERS - (relative_index+2) < 0):
+                    print("pairing with noisy")
                     d_pre = Conv2DTranspose(3, FILTER_SIZE,
                         strides=STRIDE, use_bias=True)(layers[i-1]) #note no relu here
-                    temp = add([img_input, d_pre])
+                    linked_layer = add([img_input, d_pre])
                 else:
                     d_pre = Conv2DTranspose(NB_FILTERS, FILTER_SIZE,
                         strides=STRIDE, use_bias=True)(layers[i-1]) #note no relu here
-                    temp = add([layers[NB_CONV_LAYERS - (relative_index+2)], d_pre])
+                    linked_layer = add([layers[NB_CONV_LAYERS - (relative_index+2)], d_pre])
 
-                d = activations.relu( temp ) #relu here
+                d = Activation(activations.relu)(linked_layer) #relu here
             else:
                 d = Conv2DTranspose(NB_FILTERS, FILTER_SIZE, strides=STRIDE, use_bias=True,
                     activation="relu")(layers[i-1])
 
             layers.append(d)
-            
-    print(len(layers))
-    model = Model(img_input, layers[-1])
+    
+
+    model = Model(inputs = img_input, outputs = layers[-1])
     model.compile(loss='mean_squared_error',
                   optimizer = Adam(lr=0.0001),
-                  metrics=['accuracy', metrics.psnr])
+                  metrics=['accuracy'])
     return model
-
+    
 def main():
     generator = DataGenerator(DATA_PATH, BATCH_SIZE)
 
