@@ -10,69 +10,77 @@ from keras.models import Model, Sequential
 from keras import activations
 from DataGenerator import DataGenerator
 import metrics
-
-import cv2
-import numpy as np
+from keras.backend import equal
 
 # Hyperparameters:
 DATA_PATH='../sample_data/'
-IMG_HEIGHT=3968
-IMG_WIDTH=2976
+INPUT_SIZE = (256, 256)
+IMG_SIZE = (2976, 3968)
 
-BATCH_SIZE=1
-NB_EPOCHS=1
+BATCH_SIZE=10
+NB_EPOCHS=10
 
 FILTER_SIZE = (3,3)
 NB_FILTERS = 64
 STRIDE = 1
-# Note half of total layers. Now can ensure total layers are always even
+USE_BIAS = True
+
+# Note half of total layers to ensure total layers are always even
 NB_CONV_LAYERS = 5
 
-# strides: An integer or tuple/list of 2 integers, specifying the strides of the convolution along the height
-# and width. Can be a single integer to specify the same value for all spatial dimensions.
-# Specifying any stride value != 1 is incompatible with specifying any dilation_rate value != 1.
-
 def createModel():
-    input_shape = (IMG_HEIGHT, IMG_WIDTH, 3)
+    # (height, width, channels)
+    input_shape = (INPUT_SIZE[1], INPUT_SIZE[0], 3)
     img_input   = Input(shape=input_shape)
+
+    layers = [img_input]
+
     c0 = Conv2D(NB_FILTERS, FILTER_SIZE, strides=STRIDE, use_bias=True,
         activation="relu", input_shape=input_shape)(img_input)
-    layers = [c0]
-    for i in range(1,NB_CONV_LAYERS*2):
-        print(i)
-        if(i < NB_CONV_LAYERS):
-            c = Conv2D(NB_FILTERS, FILTER_SIZE, strides=STRIDE, use_bias=True,
-                activation="relu")(layers[i-1])
-            layers.append(c)
+    layers.append(c0)
+
+    for i in range(2,NB_CONV_LAYERS*2):
+        if(i <= NB_CONV_LAYERS):
+            addConvLayer(layers)
         else:
             relative_index = (i - NB_CONV_LAYERS)
-            if(relative_index % 2 == 0):
-                print('pairing ' + str(i) + ' with ' + str(NB_CONV_LAYERS - (relative_index+2)))
-                if(NB_CONV_LAYERS - (relative_index+2) < 0):
-                    d_pre = Conv2DTranspose(3, FILTER_SIZE,
-                        strides=STRIDE, use_bias=True)(layers[i-1]) #note no relu here
-                    temp = add([img_input, d_pre])
-                else:
-                    d_pre = Conv2DTranspose(NB_FILTERS, FILTER_SIZE,
-                        strides=STRIDE, use_bias=True)(layers[i-1]) #note no relu here
-                    temp = add([layers[NB_CONV_LAYERS - (relative_index+2)], d_pre])
-
-                d = activations.relu( temp ) #relu here
+            if(relative_index % 2 == 1):
+                addSkipConnection(layers,
+                                  layers[NB_CONV_LAYERS - (relative_index)])
             else:
-                d = Conv2DTranspose(NB_FILTERS, FILTER_SIZE, strides=STRIDE, use_bias=True,
-                    activation="relu")(layers[i-1])
+                addDeconvLayer(layers)
 
-            layers.append(d)
+    # Final image has 3 channels, hence 3 filters
+    addSkipConnection(layers, layers[0], nb_filter=3)
 
-    print(len(layers))
-    model = Model(img_input, layers[-1])
+    model = Model(inputs = img_input, outputs = layers[-1])
     model.compile(loss='mean_squared_error',
                   optimizer = Adam(lr=0.0001),
-                  metrics=['accuracy', metrics.psnr])
+                  metrics=['accuracy'])
+    print(model.summary())
+
     return model
 
+def addConvLayer(layers, stride=STRIDE):
+    c = Conv2D(NB_FILTERS, FILTER_SIZE, strides=stride, use_bias=USE_BIAS,
+                activation="relu")(layers[-1])
+    layers.append(c)
+
+def addDeconvLayer(layers, stride=STRIDE):
+    d = Conv2DTranspose(NB_FILTERS, FILTER_SIZE, strides=STRIDE, use_bias=True,
+                    activation="relu")(layers[-1])
+    layers.append(d)
+
+def addSkipConnection(layers, skipped_layer, nb_filter=NB_FILTERS, filter_size=FILTER_SIZE):
+    deconv = Conv2DTranspose(nb_filter, filter_size,
+                    strides=STRIDE, use_bias=USE_BIAS)(layers[-1])
+    linked_layer = add([skipped_layer, deconv])
+    activated_layer = Activation(activations.relu)(linked_layer)
+
+    layers.append(activated_layer)
+
 def main():
-    generator = DataGenerator(DATA_PATH, BATCH_SIZE, (IMG_WIDTH, IMG_HEIGHT), (512, 512))
+    generator = DataGenerator(DATA_PATH, BATCH_SIZE, IMG_SIZE, INPUT_SIZE)
 
     model = createModel()
     model.fit_generator(generator, epochs=NB_EPOCHS)
