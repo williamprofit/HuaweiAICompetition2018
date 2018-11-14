@@ -14,10 +14,10 @@ from keras.backend import equal
 
 
 # Hyperparameters:
-# DATA_PATH='../sample_data/'
-DATA_PATH='D:/Documents/Imperial/Competitions/huaweiaicompetition/sample_data'
-IMG_HEIGHT=3968
-IMG_WIDTH=2976
+DATA_PATH='../temporary_data/'
+# DATA_PATH='D:/Documents/Imperial/Competitions/huaweiaicompetition/sample_data'
+INPUT_SIZE = (2976, 3968)
+IMG_SIZE = (2976, 3968)
 
 BATCH_SIZE=1
 NB_EPOCHS=1
@@ -25,60 +25,65 @@ NB_EPOCHS=1
 FILTER_SIZE = (3,3)
 NB_FILTERS = 64
 STRIDE = 1
+USE_BIAS = True
 # Note half of total lcayers. Now can ensure total layers are always even
-NB_CONV_LAYERS = 10
+NB_CONV_LAYERS = 5
 
 def createModel():
-    input_shape = (IMG_HEIGHT, IMG_WIDTH, 3)
+    # (height, width, channels)
+    input_shape = (INPUT_SIZE[1], INPUT_SIZE[0], 3)
     img_input   = Input(shape=input_shape)
-    layers = [img_input]
 
+    layers = [img_input]
+    
     c0 = Conv2D(NB_FILTERS, FILTER_SIZE, strides=STRIDE, use_bias=True,
         activation="relu", input_shape=input_shape)(img_input)
+    layers.append(c0)
 
-    layers.append(c0) 
-    # a lil dirty but ensures that the last layer will always be linked to input which is necessary.
-    linking_offset = (NB_CONV_LAYERS) % 2
-
-    for i in range(2,NB_CONV_LAYERS*2+1):
+    for i in range(2,NB_CONV_LAYERS*2):
         if(i <= NB_CONV_LAYERS):
-            c = Conv2D(NB_FILTERS, FILTER_SIZE, strides=STRIDE, use_bias=True,
-                activation="relu")(layers[i-1])
-            layers.append(c)
+            addConvLayer(layers)
         else:
             relative_index = (i - NB_CONV_LAYERS)
-            if(relative_index % 2 == linking_offset):
-                print('linking ' + str(i) + ' with ' + str(NB_CONV_LAYERS - (relative_index)))
-                
-                # Manually link with input since it won't work using layers[0]
-                if(NB_CONV_LAYERS - (relative_index) == 0):
-                    d_pre = Conv2DTranspose(3, FILTER_SIZE,
-                        strides=STRIDE, use_bias=True)(layers[i-1])
-                    #ideally would want to use layers[0] instead of img_input here
-                    linked_layer = add([img_input, d_pre]) 
-                else:
-                    d_pre = Conv2DTranspose(NB_FILTERS, FILTER_SIZE,
-                        strides=STRIDE, use_bias=True)(layers[i-1])
-                    linked_layer = add([layers[NB_CONV_LAYERS - (relative_index)], d_pre])
-
-                d = Activation(activations.relu)(linked_layer) #relu after link
+            if(relative_index % 2 == 1):
+                addSkipConnection(layers, layers[NB_CONV_LAYERS - (relative_index)])
             else:
-                d = Conv2DTranspose(NB_FILTERS, FILTER_SIZE, strides=STRIDE, use_bias=True,
-                    activation="relu")(layers[i-1])
+                addDeconvLayer(layers)
 
-            layers.append(d)
+    # Final image has 3 channels, hence 3 filters 
+    addSkipConnection(layers, layers[0], nb_filter=3)
 
     model = Model(inputs = img_input, outputs = layers[-1])
     model.compile(loss='mean_squared_error',
                   optimizer = Adam(lr=0.0001),
                   metrics=['accuracy'])
-    return model
+    print(model.summary())
     
+    return model
+
+def addConvLayer(layers, stride=STRIDE):
+    c = Conv2D(NB_FILTERS, FILTER_SIZE, strides=stride, use_bias=USE_BIAS,
+                activation="relu")(layers[-1])
+    layers.append(c)
+
+def addDeconvLayer(layers, stride=STRIDE):
+    d = Conv2DTranspose(NB_FILTERS, FILTER_SIZE, strides=STRIDE, use_bias=True,
+                    activation="relu")(layers[-1])
+    layers.append(d)
+
+def addSkipConnection(layers, skipped_layer, nb_filter=NB_FILTERS, filter_size=FILTER_SIZE):
+    deconv = Conv2DTranspose(nb_filter, filter_size,
+                    strides=STRIDE, use_bias=USE_BIAS)(layers[-1])
+    linked_layer = add([skipped_layer, deconv])
+    activated_layer = Activation(activations.relu)(linked_layer)
+    
+    layers.append(activated_layer)
+
 def main():
     generator = DataGenerator(DATA_PATH, BATCH_SIZE)
 
     model = createModel()
-    #model.fit_generator(generator, epochs=NB_EPOCHS)
+    # model.fit_generator(generator, epochs=NB_EPOCHS)
 
 if __name__ == '__main__':
     main()
