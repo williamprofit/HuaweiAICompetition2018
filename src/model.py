@@ -11,6 +11,8 @@ from keras import activations
 from DataGenerator import DataGenerator
 import metrics
 
+import cv2
+import numpy as np
 
 # Hyperparameters:
 DATA_PATH='../sample_data/'
@@ -26,8 +28,8 @@ STRIDE = 1
 # Note half of total layers. Now can ensure total layers are always even
 NB_CONV_LAYERS = 5
 
-# strides: An integer or tuple/list of 2 integers, specifying the strides of the convolution along the height 
-# and width. Can be a single integer to specify the same value for all spatial dimensions. 
+# strides: An integer or tuple/list of 2 integers, specifying the strides of the convolution along the height
+# and width. Can be a single integer to specify the same value for all spatial dimensions.
 # Specifying any stride value != 1 is incompatible with specifying any dilation_rate value != 1.
 
 def createModel():
@@ -61,7 +63,7 @@ def createModel():
                     activation="relu")(layers[i-1])
 
             layers.append(d)
-            
+
     print(len(layers))
     model = Model(img_input, layers[-1])
     model.compile(loss='mean_squared_error',
@@ -70,24 +72,10 @@ def createModel():
     return model
 
 def main():
-    generator = DataGenerator(DATA_PATH, BATCH_SIZE)
+    generator = DataGenerator(DATA_PATH, BATCH_SIZE, (IMG_WIDTH, IMG_HEIGHT), (512, 512))
 
     model = createModel()
-    #model.fit_generator(generator, epochs=NB_EPOCHS)
+    model.fit_generator(generator, epochs=NB_EPOCHS)
 
 if __name__ == '__main__':
     main()
-
-
-# Residual connection on a convolution layer
-
-# For more information about residual networks, see Deep Residual Learning for Image Recognition.
-
-# from keras.layers import Conv2D, Input
-
-# # input tensor for a 3-channel 256x256 image
-# x = Input(shape=(256, 256, 3))
-# # 3x3 conv with 3 output channels (same as input channels)
-# y = Conv2D(3, (3, 3), padding='same')(x)
-# # this returns x + y.
-# z = keras.layers.add([x, y])
