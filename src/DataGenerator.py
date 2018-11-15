@@ -37,7 +37,7 @@ class DataGenerator(keras.utils.Sequence):
             end = self.nb_inputs - 1
             self.reset()
 
-        nb_images_needed = int(np.ceil((end - start) / self.inputs_per_image))
+        nb_images_needed = int(np.ceil((end - start) / self.inputs_per_image)) + 1
         cur_img          = int(np.floor(start / self.inputs_per_image))
 
         x_to_load = self.x_paths[cur_img : cur_img + nb_images_needed]

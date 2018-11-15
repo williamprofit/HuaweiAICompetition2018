@@ -17,8 +17,8 @@ DATA_PATH='../sample_data/'
 INPUT_SIZE = (256, 256)
 IMG_SIZE = (2976, 3968)
 
-BATCH_SIZE=10
-NB_EPOCHS=10
+BATCH_SIZE=16
+NB_EPOCHS=1
 
 FILTER_SIZE = (3,3)
 NB_FILTERS = 64
@@ -26,7 +26,7 @@ STRIDE = 1
 USE_BIAS = True
 
 # Note half of total layers to ensure total layers are always even
-NB_CONV_LAYERS = 5
+NB_CONV_LAYERS = 10
 
 def createModel():
     # (height, width, channels)
@@ -84,6 +84,8 @@ def main():
 
     model = createModel()
     model.fit_generator(generator, epochs=NB_EPOCHS)
+
+    model.save('../models/model')
 
 if __name__ == '__main__':
     main()
