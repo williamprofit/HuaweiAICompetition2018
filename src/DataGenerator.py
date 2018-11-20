@@ -115,6 +115,52 @@ class DataGenerator(keras.utils.Sequence):
 
         return (x_train, y_train)
 
+    def getAllX(self):
+        images = []
+        for path in self.x_paths:
+            images.append(cv2.imread(path))
+
+        return images
+
+    def getAllY(self):
+        images = []
+        for path in self.y_paths:
+            images.append(cv2.imread(path))
+
+        return images
+
+    def getAllBatchesOfX(self):
+        original_batch_size = self.batch_size
+        self.batch_size     = self.nb_batches
+
+        images, _ = self.getImagesForBatch(0)
+        xs = self.createBatches(0, self.nb_batches, images)
+
+        for i in range(len(xs)):
+            xs[i] = self.preprocessImage(xs[i])
+
+        xs = np.asarray(xs)
+
+        self.batch_size = original_batch_size
+
+        return xs
+
+    def getAllBatchesOfY(self):
+        original_batch_size = self.batch_size
+        self.batch_size     = self.nb_batches
+
+        _, images = self.getImagesForBatch(0)
+        ys = self.createBatches(0, self.nb_batches, images)
+
+        for i in range(len(ys)):
+            ys[i] = self.preprocessImage(ys[i])
+
+        ys = np.asarray(ys)
+
+        self.batch_size = original_batch_size
+
+        return ys
+
     def reset(self):
         # Set index to 0 and reshuffle data
         self.index = 0
@@ -142,16 +188,14 @@ class DataGenerator(keras.utils.Sequence):
             elif 'Noisy' in paths[i]:
                 y_paths.append(paths[i])
             else:
-                print('!WARNING! Invalid image path: ' + paths[i]
-                     + '. Image was not loaded.')
+                x_paths.append(paths[i])
 
         x_paths.sort()
         y_paths.sort()
 
-        # Shuffle the paths together
-        x_paths, y_paths = self.shuffleLists(x_paths, y_paths)
-
         if len(x_paths) == len(y_paths):
+            # Shuffle the paths together
+            x_paths, y_paths = self.shuffleLists(x_paths, y_paths)
             print(str(len(paths)) + ' paths loaded.')
         else:
             print('!CRIT WARNING! x_paths and y_paths are mismatched')

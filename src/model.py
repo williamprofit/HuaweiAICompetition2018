@@ -13,12 +13,12 @@ import metrics
 from keras.backend import equal
 
 # Hyperparameters:
-DATA_PATH='../sample_data/'
+DATA_PATH = 'sample_data/'
 INPUT_SIZE = (256, 256)
 IMG_SIZE = (2976, 3968)
 
-BATCH_SIZE=16
-NB_EPOCHS=1
+BATCH_SIZE = 16
+NB_EPOCHS = 1
 
 FILTER_SIZE = (3,3)
 NB_FILTERS = 64
