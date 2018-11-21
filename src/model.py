@@ -9,7 +9,7 @@ from keras.optimizers import Adam, SGD
 from keras.models import Model, Sequential
 from keras import activations
 from DataGenerator import DataGenerator
-import metrics
+from keras  import metrics
 from keras.backend import equal
 
 # Hyperparameters:

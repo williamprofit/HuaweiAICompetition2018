@@ -4,7 +4,7 @@ import numpy as np
 import metrics
 import sys
 import cv2
-
+from skimage.measure import compare_psnr, compare_ssim
 IMG_SIZE = (1024, 1024)
 INPUT_SIZE = (256, 256)
 
@@ -58,8 +58,11 @@ def reconstructImages(batches):
         print("i: " , i)
         img = reconstructImage(batches[i : i+batches_per_img])
         reconstructed.append(img)
-    print("no recon:")
-    print(len(reconstructed))
+        cv2.namedWindow('image', cv2.WINDOW_NORMAL)
+        cv2.imshow('image',img)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
     return reconstructed
 
 def getPredictions(model, images):
@@ -79,14 +82,20 @@ def evaluate(references, images):
     print(len(images))
     assert len(references) == len(images)
 
-    resTot = 0
+    psnrTot = 0
+    ssimTot = 0
     for i in range(len(references)):
-        res = metrics.psnr(references[i], images[i])
-        resTot += res
-        print('PSNR: ' + str(res))
+        psnr = compare_psnr(references[i], images[i])
+        ssim = compare_ssim(references[i], images[i], multichannel = True)
+        ssimTot += ssim
+        psnrTot += psnr
+        print('PSNR: ' + str(psnr))
+        print('SSIM: ' + str(ssim))
 
-    resAvg = resTot/len(references)
-    print("Avg PSNR: " , resAvg)
+    psnrAvg = psnrTot/len(references)
+    ssimAvg = ssimTot/len(references)
+    print("Avg PSNR: " , psnrAvg)
+    print("Avg SSIM: " , ssimAvg)
 
 def main():
     modelPath  = sys.argv[1]
@@ -103,9 +112,10 @@ def main():
     
     print(str(len(reconstructed)) + ' images reconstructed')
 
+    unalterd = datagen.getAllX()
     referneces = datagen.getAllY()
         
-    evaluate(referneces, reconstructed)
+    evaluate(referneces, predictions)
 
 if __name__ == '__main__':
     if len(sys.argv) != 3:

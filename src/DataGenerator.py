@@ -5,8 +5,8 @@ import cv2
 import numpy as np
 import random
 
-
 class DataGenerator(keras.utils.Sequence):
+
     def __init__(self, path, batch_size, image_size, input_size):
         self.index = 0 # Indicates the current input
         self.batch_size = batch_size
@@ -76,14 +76,6 @@ class DataGenerator(keras.utils.Sequence):
                 y_min = int(row * self.input_size[1])
             else:
                 y_min = self.image_size[1] - self.input_size[1]
-            
-            # William's old method
-            # Convert row and column to pixel region. Note that for max, we
-            # use min to make sure we don't go beyond the image size
-            # x_max = min(self.image_size[0] - x_min, self.input_size[0])
-            # y_max = min(self.image_size[1] - y_min, self.input_size[1])
-            # x_min = int(row*(self.input_size[0] - (x_rem/self.nb_rows)))
-            # y_min = int(col*(self.input_size[1] - (y_rem/self.nb_cols)))
 
             x_max = x_min + self.input_size[0]
             y_max = y_min + self.input_size[1]
@@ -91,10 +83,6 @@ class DataGenerator(keras.utils.Sequence):
             # Fetch the image containing the input
             img_nb = int(np.floor(i / self.inputs_per_image))
             img = images[img_nb]
-
-            # Start with a blank subimage
-            # subimage = np.zeros((self.input_size[0], self.input_size[1], 3),
-            #                      np.uint8)
 
             # Fill the subimage with the image
             subimage = img[y_min : y_max, x_min : x_max]
