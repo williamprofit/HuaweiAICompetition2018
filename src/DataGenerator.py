@@ -17,7 +17,6 @@ class DataGenerator(keras.utils.Sequence):
         self.nb_rows = np.ceil(image_size[1] / input_size[1])
 
         self.inputs_per_image = self.nb_rows * self.nb_cols
-
         self.paths, self.x_paths, self.y_paths = self.loadPaths(path)
 
         self.nb_images  = len(self.x_paths)
@@ -68,24 +67,37 @@ class DataGenerator(keras.utils.Sequence):
             row = np.floor(i / self.nb_cols) % self.nb_rows
             col = (i - (row * self.nb_cols)) % self.nb_cols
 
+            if(col != self.nb_cols-1):
+                x_min = int(col * self.input_size[0])
+            else:
+                x_min = self.image_size[0] - self.input_size[0]
+
+            if(row != self.nb_rows-1):
+                y_min = int(row * self.input_size[1])
+            else:
+                y_min = self.image_size[1] - self.input_size[1]
+            
+            # William's old method
             # Convert row and column to pixel region. Note that for max, we
             # use min to make sure we don't go beyond the image size
-            x_min = int(col * self.input_size[0])
-            y_min = int(row * self.input_size[1])
-            x_max = min(self.image_size[0] - x_min, self.input_size[0])
-            y_max = min(self.image_size[1] - y_min, self.input_size[1])
+            # x_max = min(self.image_size[0] - x_min, self.input_size[0])
+            # y_max = min(self.image_size[1] - y_min, self.input_size[1])
+            # x_min = int(row*(self.input_size[0] - (x_rem/self.nb_rows)))
+            # y_min = int(col*(self.input_size[1] - (y_rem/self.nb_cols)))
+
+            x_max = x_min + self.input_size[0]
+            y_max = y_min + self.input_size[1]
 
             # Fetch the image containing the input
             img_nb = int(np.floor(i / self.inputs_per_image))
             img = images[img_nb]
 
             # Start with a blank subimage
-            subimage = np.zeros((self.input_size[0], self.input_size[1], 3),
-                                 np.uint8)
+            # subimage = np.zeros((self.input_size[0], self.input_size[1], 3),
+            #                      np.uint8)
 
             # Fill the subimage with the image
-            subimage[0 : y_max, 0 : x_max] = img[y_min : y_min + y_max,
-                                                 x_min : x_min + x_max]
+            subimage = img[y_min : y_max, x_min : x_max]
 
             batch.append(subimage)
 
@@ -117,6 +129,7 @@ class DataGenerator(keras.utils.Sequence):
 
     def getAllX(self):
         images = []
+        print("path: " , self.x_paths)
         for path in self.x_paths:
             images.append(cv2.imread(path))
 
@@ -138,7 +151,7 @@ class DataGenerator(keras.utils.Sequence):
 
         for i in range(len(xs)):
             xs[i] = self.preprocessImage(xs[i])
-
+        
         xs = np.asarray(xs)
 
         self.batch_size = original_batch_size
