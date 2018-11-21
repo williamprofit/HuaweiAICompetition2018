@@ -11,14 +11,15 @@ from keras import activations
 from DataGenerator import DataGenerator
 import metrics
 from keras.backend import equal
+from keras.callbacks import ModelCheckpoint, EarlyStopping, CSVLogger, TensorBoard
 
 # Hyperparameters:
-DATA_PATH = 'sample_data/'
+DATA_PATH = 'sample_data/Buildings'
 INPUT_SIZE = (256, 256)
 IMG_SIZE = (2976, 3968)
 
 BATCH_SIZE = 16
-NB_EPOCHS = 1
+NB_EPOCHS = 3
 
 FILTER_SIZE = (3,3)
 NB_FILTERS = 64
@@ -83,9 +84,16 @@ def main():
     generator = DataGenerator(DATA_PATH, BATCH_SIZE, IMG_SIZE, INPUT_SIZE)
 
     model = createModel()
-    model.fit_generator(generator, epochs=NB_EPOCHS)
 
-    model.save('../models/model')
+    checkpoint  = ModelCheckpoint(filepath='log/checkpoints/cp.hdf5', monitor='loss', verbose=1, save_best_only=True)
+    stopping    = EarlyStopping(monitor='loss', min_delta=0, patience=2, verbose=0, mode='auto')
+    logger      = CSVLogger('log/epochs.log')
+    tensorboard = TensorBoard(log_dir='log/tensorbard', batch_size=BATCH_SIZE)
+
+    callbacks  = [checkpoint, stopping, logger, tensorboard]
+
+    model.fit_generator(generator, epochs=NB_EPOCHS, callbacks=callbacks)
+    model.save('models/model')
 
 if __name__ == '__main__':
     main()
