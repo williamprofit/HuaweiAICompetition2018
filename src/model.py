@@ -58,7 +58,7 @@ def createModel():
     model = Model(inputs = img_input, outputs = layers[-1])
     model.compile(loss='mean_squared_error',
                   optimizer = Adam(lr=0.0001),
-                  metrics=['accuracy', metrics.tf_psnr])
+                  metrics=['accuracy', metrics.tf_psnr, metrics.tf_ssim])
     print(model.summary())
 
     return model

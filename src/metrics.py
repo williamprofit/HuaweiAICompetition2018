@@ -12,5 +12,8 @@ def psnr(reference, image):
     return 20 * math.log10(PIXEL_MAX / math.sqrt(mse))
 
 # Wrapper for tensorflow's psnr func to provide max value
-def tf_psnr(ref, img):
-    return tf.image.psnr(ref, img, 1.0)
+def tf_psnr(y_true, y_pred):
+    return tf.image.psnr(y_true, y_pred, max_val=1.0)
+
+def tf_ssim(y_true, y_pred):
+    return tf.image.ssim(y_true, y_pred, max_val=1.0)
