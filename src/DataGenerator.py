@@ -76,7 +76,7 @@ class DataGenerator(keras.utils.Sequence):
                 y_min = int(row * self.input_size[1])
             else:
                 y_min = self.image_size[1] - self.input_size[1]
-            
+
             # William's old method
             # Convert row and column to pixel region. Note that for max, we
             # use min to make sure we don't go beyond the image size
@@ -151,7 +151,7 @@ class DataGenerator(keras.utils.Sequence):
 
         for i in range(len(xs)):
             xs[i] = self.preprocessImage(xs[i])
-        
+
         xs = np.asarray(xs)
 
         self.batch_size = original_batch_size
@@ -196,9 +196,9 @@ class DataGenerator(keras.utils.Sequence):
         for i in range(len(paths)):
             paths[i] = str(paths[i].resolve())
 
-            if 'Clean' in paths[i]:
+            if 'Noisy' in paths[i]:
                 x_paths.append(paths[i])
-            elif 'Noisy' in paths[i]:
+            elif 'Clean' in paths[i]:
                 y_paths.append(paths[i])
             else:
                 x_paths.append(paths[i])
