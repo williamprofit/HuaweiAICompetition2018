@@ -7,7 +7,7 @@ import random
 
 class DataGenerator(keras.utils.Sequence):
 
-    def __init__(self, path, batch_size, image_size, input_size):
+    def __init__(self, path, batch_size, image_size, input_size, permutations=False):
         self.index = 0 # Indicates the current input
         self.batch_size = batch_size
         self.image_size = image_size
@@ -22,6 +22,7 @@ class DataGenerator(keras.utils.Sequence):
         self.nb_images  = len(self.x_paths)
         self.nb_inputs  = self.nb_images * self.inputs_per_image
         self.nb_batches = int(np.ceil(self.nb_inputs / self.batch_size))
+        self.permutations = permutations
 
     # Return number of batches per epoch
     def __len__(self):
@@ -52,6 +53,42 @@ class DataGenerator(keras.utils.Sequence):
 
         return x_images, y_images
 
+    def getImageAugments(self, image):
+        images = []
+        for i in range(4):
+            M = cv2.getRotationMatrix2D((self.input_size[0]/2,self.input_size[0]/2),-i*90,1)
+            dst = cv2.warpAffine(image,M,self.input_size)
+            images.append(dst)
+
+        image = cv2.flip(image, 1)
+        for i in range(4):
+            M = cv2.getRotationMatrix2D((self.input_size[0]/2,self.input_size[0]/2),-i*90,1)
+            dst = cv2.warpAffine(image,M,self.input_size)
+            images.append(dst)
+
+        return images
+
+    def getImageDeaugment(self, images):
+        deaugImages = []
+        for i in range(int(len(images)/2)):
+            M = cv2.getRotationMatrix2D((int(self.input_size[0]/2),int(self.input_size[0]/2)),i*90,1)
+            dst = cv2.warpAffine(images[i],M,self.input_size)
+            deaugImages.append(dst)
+
+        for i in range(int(len(images)/2),len(images)):
+            M = cv2.getRotationMatrix2D((int(self.input_size[0]/2),int(self.input_size[0]/2)),i*90,1)
+            dst = cv2.warpAffine(images[i],M,self.input_size)
+            dst = cv2.flip(dst,1)
+            deaugImages.append(dst)
+
+        retImage = np.zeros((self.input_size[1], self.input_size[0], 3), np.float)
+        for image in deaugImages:
+            avgImg = np.array(image,dtype=np.float)
+            retImage = retImage+avgImg/len(deaugImages)
+
+        retImage = np.array(np.round(retImage),dtype=np.uint8)
+        return retImage
+    
     def createBatches(self, start, end, images):
         fst_image_index = np.floor(start / self.inputs_per_image)
         top_left_index  = fst_image_index * self.inputs_per_image
@@ -87,7 +124,11 @@ class DataGenerator(keras.utils.Sequence):
             # Fill the subimage with the image
             subimage = img[y_min : y_max, x_min : x_max]
 
-            batch.append(subimage)
+            if(self.permutations):
+                augImages = self.getImageAugments(subimage)
+                batch.extend(augImages)
+            else:
+                batch.append(subimage)
 
         return batch
 
@@ -139,7 +180,7 @@ class DataGenerator(keras.utils.Sequence):
 
         for i in range(len(xs)):
             xs[i] = self.preprocessImage(xs[i])
-        
+
         xs = np.asarray(xs)
 
         self.batch_size = original_batch_size
@@ -184,15 +225,18 @@ class DataGenerator(keras.utils.Sequence):
         for i in range(len(paths)):
             paths[i] = str(paths[i].resolve())
 
-            if 'Clean' in paths[i]:
+            if 'Noisy' in paths[i]:
                 x_paths.append(paths[i])
-            elif 'Noisy' in paths[i]:
+            elif 'Clean' in paths[i]:
                 y_paths.append(paths[i])
             else:
                 x_paths.append(paths[i])
 
         x_paths.sort()
         y_paths.sort()
+
+        if(len(y_paths)==0):
+            y_paths = x_paths
 
         if len(x_paths) == len(y_paths):
             # Shuffle the paths together
