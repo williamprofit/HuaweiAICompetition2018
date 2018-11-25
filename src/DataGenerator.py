@@ -7,17 +7,18 @@ import random
 
 class DataGenerator(keras.utils.Sequence):
 
-    def __init__(self, path, batch_size, image_size, input_size, permutations=False):
+    def __init__(self, path, batch_size, input_size, permutations=False):
         self.index = 0 # Indicates the current input
+        self.paths, self.x_paths, self.y_paths = self.loadPaths(path)
+
         self.batch_size = batch_size
-        self.image_size = image_size
+        self.image_size = self.inferImageSize()
         self.input_size = input_size
 
-        self.nb_cols = np.ceil(image_size[0] / input_size[0])
-        self.nb_rows = np.ceil(image_size[1] / input_size[1])
+        self.nb_cols = np.ceil(self.image_size[0] / input_size[0])
+        self.nb_rows = np.ceil(self.image_size[1] / input_size[1])
 
         self.inputs_per_image = self.nb_rows * self.nb_cols
-        self.paths, self.x_paths, self.y_paths = self.loadPaths(path)
 
         self.nb_images  = len(self.x_paths)
         self.nb_inputs  = self.nb_images * self.inputs_per_image
@@ -88,7 +89,7 @@ class DataGenerator(keras.utils.Sequence):
 
         retImage = np.array(np.round(retImage),dtype=np.uint8)
         return retImage
-    
+
     def createBatches(self, start, end, images):
         fst_image_index = np.floor(start / self.inputs_per_image)
         top_left_index  = fst_image_index * self.inputs_per_image
@@ -217,6 +218,13 @@ class DataGenerator(keras.utils.Sequence):
         combined = list(zip(a, b))
         random.shuffle(combined)
         return zip(*combined)
+
+    def inferImageSize(self):
+        img = cv2.imread(self.x_paths[0])
+        return (img.shape[1], img.shape[0])
+
+    def getImageSize(self):
+        return self.image_size
 
     def loadPaths(self, path):
         paths   = list(Path(path).rglob('*.png'))
