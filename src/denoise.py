@@ -37,6 +37,7 @@ def reconstructImage(batches, img_size):
         batch = batches[i]
         batch = batch.reshape(INPUT_SIZE[0], INPUT_SIZE[1], 3)
         batch = batch * 255
+
         reconstruct[y_min:y_max, x_min:x_max] = batch[0:INPUT_SIZE[0],
                                                       0:INPUT_SIZE[1]]
 
@@ -44,21 +45,6 @@ def reconstructImage(batches, img_size):
     original = reconstruct[0:img_size[1], 0:img_size[0]]
 
     return original
-
-def reconstructImages(batches, img_size):
-    nb_cols = np.ceil(img_size[0] / INPUT_SIZE[0])
-    nb_rows = np.ceil(img_size[1] / INPUT_SIZE[1])
-    batches_per_img = int(nb_cols * nb_rows)
-    nb_images = int(len(batches) / batches_per_img)
-
-    reconstructed = []
-    for i in range(0, nb_images*batches_per_img, batches_per_img):
-        img = reconstructImage(batches[i : i+batches_per_img], img_size)
-        reconstructed.append(img)
-
-    print(str(len(reconstructed)) + ' images reconstructed')
-
-    return reconstructed
 
 def getPredictions(model, images):
     predictions = []
@@ -81,15 +67,22 @@ def saveImages(images, path):
         cv2.imwrite(path + '/Output_' + str(i+1) + '.png', images[i])
 
 def denoise(modelPath, imagesPath, savePath):
-    datagen = DataGenerator(imagesPath, 1, INPUT_SIZE)
+    datagen = DataGenerator(imagesPath, 1, INPUT_SIZE, permutations=False)
+    
     batches = datagen.getAllBatchesOfX()
+    if(not modelPath.endswith(".hdf5")):
+        modelPath += ".hdf5"
+
     model   = load_model(modelPath, custom_objects={'tf_psnr':metrics.tf_psnr,
                                                     'tf_ssim':metrics.tf_ssim})
-
     predictions   = getPredictions(model, batches)
-    reconstructed = reconstructImages(predictions, datagen.getImageSize())
+
+
+    reconstructed = datagen.reconstructImages(predictions, datagen.getImageSize())
+    
 
     saveImages(reconstructed, savePath)
+    
 
     return reconstructed
 

@@ -24,6 +24,7 @@ class DataGenerator(keras.utils.Sequence):
         self.nb_inputs  = self.nb_images * self.inputs_per_image
         self.nb_batches = int(np.ceil(self.nb_inputs / self.batch_size))
         self.permutations = permutations
+        self.nb_permutations = 8 if self.permutations else 1
 
     # Return number of batches per epoch
     def __len__(self):
@@ -57,30 +58,37 @@ class DataGenerator(keras.utils.Sequence):
     def getImageAugments(self, image):
         images = []
         for i in range(4):
-            M = cv2.getRotationMatrix2D((self.input_size[0]/2,self.input_size[0]/2),-i*90,1)
-            dst = cv2.warpAffine(image,M,self.input_size)
+            # M = cv2.getRotationMatrix2D((self.input_size[0]/2,self.input_size[0]/2),-i*90,1)
+            dst = np.rot90(image, -i, (0,1))
             images.append(dst)
+            # images.append(image)
 
         image = cv2.flip(image, 1)
         for i in range(4):
-            M = cv2.getRotationMatrix2D((self.input_size[0]/2,self.input_size[0]/2),-i*90,1)
-            dst = cv2.warpAffine(image,M,self.input_size)
+            # M = cv2.getRotationMatrix2D((self.input_size[0]/2,self.input_size[0]/2),-i*90,1)
+            # dst = cv2.warpAffine(image,M,self.input_size)
+            dst = np.rot90(image, -i, (0,1))
             images.append(dst)
+            # images.append(image)
 
         return images
 
     def getImageDeaugment(self, images):
         deaugImages = []
         for i in range(int(len(images)/2)):
-            M = cv2.getRotationMatrix2D((int(self.input_size[0]/2),int(self.input_size[0]/2)),i*90,1)
-            dst = cv2.warpAffine(images[i],M,self.input_size)
+            # M = cv2.getRotationMatrix2D((int(self.input_size[0]/2),int(self.input_size[0]/2)),i*90,1)
+            # dst = cv2.warpAffine(images[i],M,self.input_size)
+            dst = np.rot90(images[i], i, (0,1))
             deaugImages.append(dst)
+            # deaugImages.append(images[i])
 
         for i in range(int(len(images)/2),len(images)):
-            M = cv2.getRotationMatrix2D((int(self.input_size[0]/2),int(self.input_size[0]/2)),i*90,1)
-            dst = cv2.warpAffine(images[i],M,self.input_size)
+            # M = cv2.getRotationMatrix2D((int(self.input_size[0]/2),int(self.input_size[0]/2)),i*90,1)
+            # dst = cv2.warpAffine(images[i],M,self.input_size)
+            dst = np.rot90(images[i], i, (0,1))
             dst = cv2.flip(dst,1)
             deaugImages.append(dst)
+            # deaugImages.append(images[i])
 
         retImage = np.zeros((self.input_size[1], self.input_size[0], 3), np.float)
         for image in deaugImages:
@@ -89,6 +97,70 @@ class DataGenerator(keras.utils.Sequence):
 
         retImage = np.array(np.round(retImage),dtype=np.uint8)
         return retImage
+
+    def reconstructImage(self, batches, img_size):
+        nb_cols = np.ceil(img_size[0] / self.input_size[0])
+        nb_rows = np.ceil(img_size[1] / self.input_size[1])
+
+        assert nb_cols * nb_rows == len(batches)
+
+        # Create an empty image of maximum size that
+        # includes padding to fit all batches
+        size_x = int(self.input_size[0] * nb_cols)
+        size_y = int(self.input_size[1] * nb_rows)
+        reconstruct = np.zeros((size_y, size_x, 3), np.uint8)
+        
+        for i in range(len(batches)):
+            row = np.floor(i / nb_cols)
+            col = (i - (row * nb_cols))
+
+            x_min = int(col * self.input_size[0])
+            y_min = int(row * self.input_size[1])
+            x_max = int((col + 1) * self.input_size[0])
+            y_max = int((row + 1) * self.input_size[1])
+
+            # Paste the batch onto the image
+            batch = batches[i]
+            
+            print(y_min,y_max,x_min,x_max)
+
+            reconstruct[y_min:y_max, x_min:x_max] = batch[0:self.input_size[0],
+                                                        0:self.input_size[1]]
+        return reconstruct
+
+    def reconstructImages(self, batches, img_size):
+        nb_cols = np.ceil(img_size[0] / self.input_size[0])
+        nb_rows = np.ceil(img_size[1] / self.input_size[1])
+        batches_per_img = int(nb_cols * nb_rows * self.nb_permutations)
+        nb_images = int(len(batches) / batches_per_img)
+
+        reshapedBatches = []
+        for batch in batches:
+            batch = batch.reshape(self.input_size[0], self.input_size[1], 3)
+            # cv2.imshow("recon 1...", batch)
+            # cv2.waitKey(0)
+            # cv2.destroyAllWindows()
+            batch = batch*255
+            
+            reshapedBatches.append(batch)
+
+        batches = reshapedBatches
+
+        interpolatedBatches = []
+        if (self.permutations):
+            for i in range (0,nb_images*batches_per_img,self.nb_permutations):
+                interpolatedBatch = self.getImageDeaugment(batches[i:i+self.nb_permutations])
+                interpolatedBatches.append(interpolatedBatch)
+            batches = interpolatedBatches
+
+        reconstructed = []
+        for i in range(0, nb_images*batches_per_img, batches_per_img):
+            img = self.reconstructImage(batches[i : i+batches_per_img], img_size)
+            reconstructed.append(img)
+
+        print(str(len(reconstructed)) + ' images reconstructed')
+
+        return reconstructed
 
     def createBatches(self, start, end, images):
         fst_image_index = np.floor(start / self.inputs_per_image)
