@@ -1,50 +1,22 @@
 from keras.models import load_model
 from DataGenerator import DataGenerator
 from skimage.measure import compare_psnr, compare_ssim
+import shutil
 import metrics
 import numpy as np
 import metrics
 import sys
 import cv2
+import os
 
 INPUT_SIZE = (256, 256)
+PADDING = 32
+PERMUTATIONS=False
+#Keep linewidth even
+LINEWIDTH = 20
 
 def printHelp():
     print('Usage: denoise [path to model] [path to images] {path to save dir}')
-
-def reconstructImage(batches, img_size):
-    nb_cols = np.ceil(img_size[0] / INPUT_SIZE[0])
-    nb_rows = np.ceil(img_size[1] / INPUT_SIZE[1])
-
-    assert nb_cols * nb_rows == len(batches)
-
-    # Create an empty image of maximum size that
-    # includes padding to fit all batches
-    size_x = int(INPUT_SIZE[0] * nb_cols)
-    size_y = int(INPUT_SIZE[1] * nb_rows)
-    reconstruct = np.zeros((size_y, size_x, 3), np.uint8)
-
-    for i in range(len(batches)):
-        row = np.floor(i / nb_cols)
-        col = (i - (row * nb_cols))
-
-        x_min = int(col * INPUT_SIZE[0])
-        y_min = int(row * INPUT_SIZE[1])
-        x_max = int((col + 1) * INPUT_SIZE[0])
-        y_max = int((row + 1) * INPUT_SIZE[1])
-
-        # Paste the batch onto the image
-        batch = batches[i]
-        batch = batch.reshape(INPUT_SIZE[0], INPUT_SIZE[1], 3)
-        batch = batch * 255
-
-        reconstruct[y_min:y_max, x_min:x_max] = batch[0:INPUT_SIZE[0],
-                                                      0:INPUT_SIZE[1]]
-
-    # Crop out the padding to get the original image
-    original = reconstruct[0:img_size[1], 0:img_size[0]]
-
-    return original
 
 def getPredictions(model, images):
     predictions = []
@@ -66,9 +38,139 @@ def saveImages(images, path):
     for i in range(len(images)):
         cv2.imwrite(path + '/Output_' + str(i+1) + '.png', images[i])
 
+def addPadding(originalImgs, padding):
+    bigImgs = []
+    for img in originalImgs:
+        size_x = img.shape[1]
+        size_y = img.shape[0]
+        big_size_x = size_x + 2 * padding
+        big_size_y = size_y + 2 * padding
+        bigImg = np.zeros((big_size_y, big_size_x, 3), np.float)
+
+        # Copy the original image on the center
+        bigImg[padding:size_y+padding, padding:size_x+padding] = img
+
+        # Create mirrored borders
+        # Top
+        bigImg[0:padding, padding:size_x+padding] = cv2.flip(img[0:padding, :], 0)
+        # Bot
+        bigImg[size_y+padding:big_size_y, padding:size_x+padding] = cv2.flip(img[size_y-padding:size_y, :], 0)
+        # Left
+        bigImg[padding:size_y+padding, 0:padding] = cv2.flip(img[:, 0:padding], 1)
+        # Right
+        bigImg[padding:size_y+padding, size_x+padding:big_size_x] = cv2.flip(img[:, size_x-padding:size_x], 1)
+
+        # Create mirrored corners
+        # Top Left
+        bigImg[0:padding, 0:padding] = cv2.flip(bigImg[0:padding, padding:2*padding], 1)
+        # Top Right
+        bigImg[0:padding, size_x+padding:big_size_x] = cv2.flip(bigImg[0:padding, size_x:size_x+padding], 1)
+        # Bot Left
+        bigImg[size_y+padding:big_size_y, 0:padding] = cv2.flip(bigImg[size_y:size_y+padding, 0:padding], 0)
+        # Bot Right
+        bigImg[size_y+padding:big_size_y, size_x+padding:big_size_x] = cv2.flip(bigImg[size_y:size_y+padding, size_x:size_x+padding], 0)
+
+        bigImgs.append(bigImg)
+
+    return bigImgs
+
+def removeNoisyGrid(smallImages, bigImages, padding):
+    xSize = smallImages[0].shape[1]
+    ySize = smallImages[0].shape[0]
+
+        # for simplicity, trim big image into same size as small image
+    for i in range(len(bigImages)):
+        bigImages[i] = bigImages[i][padding:ySize+padding, padding:xSize+padding]
+
+    halfline = int(LINEWIDTH/2)
+
+    for i in range(len(smallImages)):
+        # Clean vertical lines
+        # Deal with border first
+        smallImages[i][:, 0:halfline] = bigImages[i][:, 0:halfline]
+        smallImages[i][:, xSize-halfline:] = bigImages[i][:, xSize-halfline:]
+        # Deal with inner grid lines
+        for x in range(INPUT_SIZE[0]-halfline, xSize-LINEWIDTH, INPUT_SIZE[0]):
+            smallImages[i][:, x:x+LINEWIDTH] = bigImages[i][:, x:x+LINEWIDTH]
+
+        # Clean horizontal lines
+        # Deal with border first
+        smallImages[i][0:halfline, :] = bigImages[i][0:halfline, :]
+        smallImages[i][ySize-halfline:, :] = bigImages[i][ySize-halfline:, :]
+        # Deal with inner grid lines
+        for y in range(INPUT_SIZE[1]-halfline, ySize-LINEWIDTH, INPUT_SIZE[1]):
+            smallImages[i][y:y+LINEWIDTH, :] = bigImages[i][y:y+LINEWIDTH, :]
+
+    return smallImages
+
+def removeNoisyEdgeDots(smallImages, bigImages, padding, bigPadding):
+    xSize = smallImages[0].shape[1]
+    ySize = smallImages[0].shape[0]
+    halfline = int(LINEWIDTH/2)
+    xOverflow = xSize % INPUT_SIZE[0]
+    for i in range(len(bigImages)):
+        bigImages[i] = bigImages[i][bigPadding:ySize+bigPadding, bigPadding:xSize+bigPadding]
+
+    for i in range(len(smallImages)):
+# Along x
+        x = xSize-(INPUT_SIZE[0]-padding)-halfline
+        smallImages[i][0:halfline, x:x+LINEWIDTH] = bigImages[i][0:halfline, x:x+LINEWIDTH]
+        for x in range(INPUT_SIZE[0]-padding-halfline, xSize-LINEWIDTH, INPUT_SIZE[0]):
+            smallImages[i][0:halfline, x:x+LINEWIDTH] = bigImages[i][0:halfline, x:x+LINEWIDTH]
+
+        for y in range(INPUT_SIZE[1]-halfline, ySize-LINEWIDTH, INPUT_SIZE[1]):
+            x = xSize-(INPUT_SIZE[0]-padding)-halfline
+            smallImages[i][y:y+LINEWIDTH, x:x+LINEWIDTH] = bigImages[i][y:y+LINEWIDTH, x:x+LINEWIDTH]
+            for x in range(INPUT_SIZE[0]-padding-halfline, xSize-LINEWIDTH, INPUT_SIZE[0]):
+                smallImages[i][y:y+LINEWIDTH, x:x+LINEWIDTH] = bigImages[i][y:y+LINEWIDTH, x:x+LINEWIDTH]
+
+        x = xSize-(INPUT_SIZE[0]-padding)-halfline
+        smallImages[i][ySize-halfline:, x:x+LINEWIDTH] = bigImages[i][ySize-halfline:, x:x+LINEWIDTH]
+        for x in range(INPUT_SIZE[0]-padding-halfline, xSize-LINEWIDTH, INPUT_SIZE[0]):
+            smallImages[i][ySize-halfline:, x:x+LINEWIDTH] = bigImages[i][ySize-halfline:, x:x+LINEWIDTH]
+
+# Along y
+        y = ySize-(INPUT_SIZE[1]-padding)-halfline
+        smallImages[i][y:y+LINEWIDTH, 0:halfline] = bigImages[i][y:y+LINEWIDTH, 0:halfline]
+        for y in range(INPUT_SIZE[1]-padding-halfline, ySize-LINEWIDTH, INPUT_SIZE[1]):
+            smallImages[i][y:y+LINEWIDTH, 0:halfline] = bigImages[i][y:y+LINEWIDTH, 0:halfline]
+
+        for x in range(INPUT_SIZE[0]-halfline, xSize-LINEWIDTH, INPUT_SIZE[0]):
+            y = ySize-(INPUT_SIZE[1]-padding)-halfline
+            smallImages[i][y:y+LINEWIDTH, x:x+LINEWIDTH] = bigImages[i][y:y+LINEWIDTH, x:x+LINEWIDTH]
+            for y in range(INPUT_SIZE[1]-padding-halfline, ySize-LINEWIDTH, INPUT_SIZE[1]):
+                smallImages[i][y:y+LINEWIDTH, x:x+LINEWIDTH] = bigImages[i][y:y+LINEWIDTH, x:x+LINEWIDTH]
+
+        y = ySize-(INPUT_SIZE[1]-padding)-halfline
+        smallImages[i][y:y+LINEWIDTH:, xSize-halfline:] = bigImages[i][y:y+LINEWIDTH:, xSize-halfline:]
+        for y in range(INPUT_SIZE[1]-padding-halfline, ySize-LINEWIDTH, INPUT_SIZE[1]):
+            smallImages[i][y:y+LINEWIDTH:, xSize-halfline:] = bigImages[i][y:y+LINEWIDTH:, xSize-halfline:]
+
+    return smallImages
+
+
+def createBigImages(model, originalImages, padding):
+    tempDirectory = "temp_bigimages"
+    if os.path.exists(tempDirectory):
+        shutil.rmtree(tempDirectory)
+    os.makedirs(tempDirectory)
+
+    bigImages = addPadding(originalImages, padding)
+    saveImages(bigImages, tempDirectory)
+
+    bigDatagen = DataGenerator(tempDirectory, 1, INPUT_SIZE, permutations=PERMUTATIONS)
+    bigBatches     = bigDatagen.getAllBatchesOfX()
+    bigPredictions = getPredictions(model, bigBatches)
+
+    bigReconstructed = bigDatagen.reconstructImages(bigPredictions)
+    saveImages(bigImages, tempDirectory)
+
+    return bigReconstructed
+
 def denoise(modelPath, imagesPath, savePath):
-    datagen = DataGenerator(imagesPath, 1, INPUT_SIZE, permutations=False)
-    
+    usePermutations = False
+    datagen = DataGenerator(imagesPath, 1, INPUT_SIZE, permutations=PERMUTATIONS)
+
     batches = datagen.getAllBatchesOfX()
     if(not modelPath.endswith(".hdf5")):
         modelPath += ".hdf5"
@@ -76,13 +178,14 @@ def denoise(modelPath, imagesPath, savePath):
     model   = load_model(modelPath, custom_objects={'tf_psnr':metrics.tf_psnr,
                                                     'tf_ssim':metrics.tf_ssim})
     predictions   = getPredictions(model, batches)
+    smallReconstructed = datagen.reconstructImages(predictions)
 
+    bigImages = createBigImages(model, datagen.getAllX(), PADDING)
+    biggerImages = createBigImages(model, datagen.getAllX(), PADDING + 3 * LINEWIDTH)
 
-    reconstructed = datagen.reconstructImages(predictions, datagen.getImageSize())
-    
-
+    reconstructed = removeNoisyGrid(smallReconstructed, bigImages, PADDING)
+    reconstructed = removeNoisyEdgeDots(reconstructed, biggerImages, PADDING, PADDING + 3 * LINEWIDTH)
     saveImages(reconstructed, savePath)
-    
 
     return reconstructed
 
