@@ -8,10 +8,11 @@ import metrics
 import sys
 import cv2
 import os
+import ntpath
 
 INPUT_SIZE = (256, 256)
 PADDING = 32
-PERMUTATIONS=False
+PERMUTATIONS=True
 #Keep linewidth even
 LINEWIDTH = 20
 
@@ -30,13 +31,15 @@ def getPredictions(model, images):
 
     return predictions
 
-def saveImages(images, path):
+def saveImages(images, path, imgNames):
+    assert len(images) == len(imgNames)
+
     if path == '':
         return
     print('Saving images to ' + path + ' ...')
 
     for i in range(len(images)):
-        cv2.imwrite(path + '/Output_' + str(i+1) + '.png', images[i])
+        cv2.imwrite(path + '/'+ imgNames[i], images[i])
 
 def addPadding(originalImgs, padding):
     bigImgs = []
@@ -149,29 +152,34 @@ def removeNoisyEdgeDots(smallImages, bigImages, padding, bigPadding):
     return smallImages
 
 
-def createBigImages(model, originalImages, padding):
+def createBigImages(model, originalImages, padding, imgNames):
     tempDirectory = "temp_bigimages"
     if os.path.exists(tempDirectory):
         shutil.rmtree(tempDirectory)
     os.makedirs(tempDirectory)
 
     bigImages = addPadding(originalImages, padding)
-    saveImages(bigImages, tempDirectory)
+    saveImages(bigImages, tempDirectory, imgNames)
 
     bigDatagen = DataGenerator(tempDirectory, 1, INPUT_SIZE, permutations=PERMUTATIONS)
     bigBatches     = bigDatagen.getAllBatchesOfX()
     bigPredictions = getPredictions(model, bigBatches)
 
     bigReconstructed = bigDatagen.reconstructImages(bigPredictions)
-    saveImages(bigImages, tempDirectory)
+    saveImages(bigImages, tempDirectory, imgNames)
 
     return bigReconstructed
 
 def denoise(modelPath, imagesPath, savePath):
-    usePermutations = False
     datagen = DataGenerator(imagesPath, 1, INPUT_SIZE, permutations=PERMUTATIONS)
 
     batches = datagen.getAllBatchesOfX()
+    imgNames = []
+
+    xpaths = datagen.x_paths
+    for path in xpaths:
+        imgNames.append(ntpath.basename(path))
+
     if(not modelPath.endswith(".hdf5")):
         modelPath += ".hdf5"
 
@@ -180,12 +188,12 @@ def denoise(modelPath, imagesPath, savePath):
     predictions   = getPredictions(model, batches)
     smallReconstructed = datagen.reconstructImages(predictions)
 
-    bigImages = createBigImages(model, datagen.getAllX(), PADDING)
-    biggerImages = createBigImages(model, datagen.getAllX(), PADDING + 3 * LINEWIDTH)
+    bigImages = createBigImages(model, datagen.getAllX(), PADDING, imgNames)
+    biggerImages = createBigImages(model, datagen.getAllX(), PADDING + 3 * LINEWIDTH, imgNames)
 
     reconstructed = removeNoisyGrid(smallReconstructed, bigImages, PADDING)
     reconstructed = removeNoisyEdgeDots(reconstructed, biggerImages, PADDING, PADDING + 3 * LINEWIDTH)
-    saveImages(reconstructed, savePath)
+    saveImages(reconstructed, savePath, imgNames)
 
     return reconstructed
 

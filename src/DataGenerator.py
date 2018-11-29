@@ -58,18 +58,13 @@ class DataGenerator(keras.utils.Sequence):
     def getImageAugments(self, image):
         images = []
         for i in range(4):
-            # M = cv2.getRotationMatrix2D((self.input_size[0]/2,self.input_size[0]/2),-i*90,1)
             dst = np.rot90(image, -i, (0,1))
             images.append(dst)
-            # images.append(image)
 
         image = cv2.flip(image, 1)
         for i in range(4):
-            # M = cv2.getRotationMatrix2D((self.input_size[0]/2,self.input_size[0]/2),-i*90,1)
-            # dst = cv2.warpAffine(image,M,self.input_size)
             dst = np.rot90(image, -i, (0,1))
             images.append(dst)
-            # images.append(image)
 
         return images
 
@@ -93,15 +88,10 @@ class DataGenerator(keras.utils.Sequence):
         return retImage
 
     def reconstructImage(self, batches):
-        #nb_cols = np.ceil(self.image_size[0] / self.input_size[0])
-        #nb_rows = np.ceil(self.image_size[1] / self.input_size[1])
+        print("recon batch length: " + str(len(batches)))
+        print("col*row: " , str(int(self.nb_cols * self.nb_rows)))
+        assert int(self.nb_cols * self.nb_rows) == len(batches)
 
-        assert self.nb_cols * self.nb_rows == len(batches)
-
-        # Create an empty image of maximum size that
-        # includes padding to fit all batches
-        #size_x = int(self.input_size[0] * self.nb_cols)
-        #size_y = int(self.input_size[1] * self.nb_rows)
         reconstruct = np.zeros((self.image_size[1], self.image_size[0], 3), np.uint8)
 
         for i in range(len(batches)):
@@ -131,11 +121,6 @@ class DataGenerator(keras.utils.Sequence):
         return reconstruct
 
     def reconstructImages(self, batches):
-        #nb_cols = np.ceil(self.image_size[0] / self.input_size[0])
-        #nb_rows = np.ceil(self.image_size[1] / self.input_size[1])
-        #batches_per_img = int(nb_cols * nb_rows * self.nb_permutations)
-        #nb_images = int(len(batches) / batches_per_img)
-
         reshapedBatches = []
         for batch in batches:
             batch = batch.reshape(self.input_size[0], self.input_size[1], 3)
@@ -145,14 +130,16 @@ class DataGenerator(keras.utils.Sequence):
 
         batches = reshapedBatches
 
+        print("pre avg batch length: " + str(len(batches)))
         interpolatedBatches = []
         if (self.permutations):
-            for i in range (0,self.nb_images*self.inputs_per_image,self.nb_permutations):
+            for i in range (0, len(batches), self.nb_permutations):
                 interpolatedBatch = self.getImageDeaugment(batches[i:i+self.nb_permutations])
                 interpolatedBatches.append(interpolatedBatch)
             batches = interpolatedBatches
-
+        print("batch length: " + str(len(batches)))
         reconstructed = []
+
         for i in range(0, self.nb_images*self.inputs_per_image, self.inputs_per_image):
             img = self.reconstructImage(batches[i : i+self.inputs_per_image])
             reconstructed.append(img)
